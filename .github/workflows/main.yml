@@ -12,7 +12,7 @@ jobs:
     
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Environment
         # 即使默认自带，加上这一步可以确保 jq 处于最新状态
