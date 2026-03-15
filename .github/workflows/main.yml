@@ -49,9 +49,4 @@ jobs:
             exit 1
           fi
 
-          
-          
-          # 执行变量替换（解析命令替换）
-          FAIL_MSG=$(eval "cat <<'EVAL_EOF'\n$FAIL_MSG\nEVAL_EOF")
-          
-          
+      
