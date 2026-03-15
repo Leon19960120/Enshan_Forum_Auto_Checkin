@@ -1,14 +1,14 @@
+
+
 {
-  "BARK_URL": "",
-  "TELEGRAM_TOKEN":  "",
-  "TELEGRAM_USERID": "",
-  "ENSHAN": [
+  "notice": {
+    "bark_url": "{{BARK_URL}}",
+    "telegram_token": "{{TELEGRAM_TOKEN}}",
+    "telegram_userid": "{{TELEGRAM_USERID}}"
+  },
+  "enshan": [
     {
-    "cookie": ""
+      "cookie": "{{ENSHAN_COOKIE}}"
     }
-  ],
-  "USER_AGENTS": [
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15"
-      ]
+  ]
 }
