@@ -25,27 +25,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install requests urllib3
-
-      - name: Random Delay (Anti-Risk)
-        run: |
-          delay=$(( RANDOM % 60 + 1 ))
-          echo "📌 随机延迟 ${delay} 秒..."
-          sleep $delay
-
-      - name: Check Config File
-        run: |
-          CONFIG_PATH="./config.json"
-          if [ ! -f "$CONFIG_PATH" ]; then
-            CONFIG_PATH="./configjson"
-            if [ ! -f "$CONFIG_PATH" ]; then
-              echo "❌ 错误：未找到 config.json / configjson！"
-              ls -l
-              exit 1
-            fi
-          fi
-          echo "✅ 配置文件检查通过"
-          mv "$CONFIG_PATH" ./config.json
-
+      
       - name: Replace Config Placeholders
         env:
           ENSHAN_COOKIE: ${{ secrets.ENSHAN_COOKIE }}
