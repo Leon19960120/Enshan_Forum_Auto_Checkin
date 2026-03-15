@@ -1,39 +1,78 @@
 name: Enshan Forum Auto Checkin
 
 on:
-  workflow_dispatch: # 支持手动触发测试
+  workflow_dispatch:  # 手动触发测试
   schedule:
-    # 每天北京时间 08:35 运行 (UTC 00:35)，稍微错开整点更安全
-    - cron: '35 0 * * *'
+    - cron: '35 0 * * *'  # 北京时间 08:35 执行（UTC+8）
 
 jobs:
   checkin:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 10  # 超时保护（避免卡死）
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 1  # 浅克隆加速
 
-      - name: Setup Environment
-        # 即使默认自带，加上这一步可以确保 jq 处于最新状态
-        run: sudo apt-get install -y jq curl
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"  # 适配 dailycheckin 框架
+          cache: "pip"  # 缓存依赖
 
-      - name: Random Delay
-        # 随机延迟 1 到 60 秒，模拟真人行为，对抗简单风控
-        run: sleep $(( RANDOM % 60 + 1 ))
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install dailycheckin requests  # 安装核心依赖
 
-      - name: Run Enshan Script
+      - name: Random Delay (Anti-Risk)
+        run: |
+          # 随机延迟 1-60 秒，模拟真人操作
+          delay=$(( RANDOM % 60 + 1 ))
+          echo "📌 随机延迟 ${delay} 秒..."
+          sleep $delay
+
+      - name: Check Config File
+        run: |
+          # 检查 config.json 是否存在
+          CONFIG_PATH="./config.json"
+          if [ ! -f "$CONFIG_PATH" ]; then
+            echo "❌ 错误：未找到 config.json！"
+            ls -R  # 列出所有文件便于排查
+            exit 1
+          fi
+          echo "✅ 配置文件检查通过"
+
+      - name: Run Enshan Checkin
         env:
-          # 确保这里的名字和你在 GitHub Settings -> Secrets 里填的一模一样
           ENSHAN_COOKIE: ${{ secrets.ENSHAN_COOKIE }}
           BARK_URL: ${{ secrets.BARK_URL }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_USERID: ${{ secrets.TELEGRAM_USERID }}
         run: |
-          # 检查目录是否存在，不存在则报错提醒
-          if [ ! -f "./shell/enshan.sh" ]; then
-            echo "❌ 错误: 未在 ./shell/ 目录下找到 enshan.sh"
-            ls -R
-            exit 1
+          # 替换 config.json 中的占位符为真实环境变量
+          sed -i "s|\${{ secrets.ENSHAN_COOKIE }}|$ENSHAN_COOKIE|g" ./config.json
+          sed -i "s|\${{ secrets.BARK_URL }}|$BARK_URL|g" ./config.json
+          sed -i "s|\${{ secrets.TELEGRAM_TOKEN }}|$TELEGRAM_TOKEN|g" ./config.json
+          sed -i "s|\${{ secrets.TELEGRAM_USERID }}|$TELEGRAM_USERID|g" ./config.json
+          
+          # 执行 Python 主脚本（仅执行恩山任务）
+          echo "🔄 开始恩山签到..."
+          python main.py --include ENSHAN
+
+      - name: Failure Notification
+        if: failure()  # 仅失败时触发
+        env:
+          BARK_URL: ${{ secrets.BARK_URL }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_USERID: ${{ secrets.TELEGRAM_USERID }}
+        run: |
+          # 推送失败通知（Bark + Telegram）
+          FAIL_MSG="❌ 恩山签到失败！时间：$(date +'%Y-%m-%d %H:%M:%S')"
+          # Bark 通知
+          [ -n "$BARK_URL" ] && curl -X POST "$BARK_URL/恩山签到失败/$FAIL_MSG"
+          # Telegram 通知
+          if [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_USERID" ]; then
+            curl -X POST "https://api.telegram.org/bot$TELEGRAM_TOKEN/sendMessage" -d "chat_id=$TELEGRAM_USERID&text=$FAIL_MSG"
           fi
-          bash ./shell/enshan.sh
