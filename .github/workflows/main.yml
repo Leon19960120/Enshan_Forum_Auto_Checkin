@@ -1,52 +1,39 @@
 name: Enshan Forum Auto Checkin
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 支持手动触发测试
   schedule:
+    # 每天北京时间 08:35 运行 (UTC 00:35)，稍微错开整点更安全
     - cron: '35 0 * * *'
 
 jobs:
   checkin:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-          cache: "pip"
+      - name: Setup Environment
+        # 即使默认自带，加上这一步可以确保 jq 处于最新状态
+        run: sudo apt-get install -y jq curl
 
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests urllib3
-      
-      - name: Replace Config Placeholders
+      - name: Random Delay
+        # 随机延迟 1 到 60 秒，模拟真人行为，对抗简单风控
+        run: sleep $(( RANDOM % 60 + 1 ))
+
+      - name: Run Enshan Script
         env:
+          # 确保这里的名字和你在 GitHub Settings -> Secrets 里填的一模一样
           ENSHAN_COOKIE: ${{ secrets.ENSHAN_COOKIE }}
           BARK_URL: ${{ secrets.BARK_URL }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_USERID: ${{ secrets.TELEGRAM_USERID }}
         run: |
-          sed -i "s@{{ENSHAN_COOKIE}}@${ENSHAN_COOKIE:-}@g" ./config.json
-          sed -i "s@{{BARK_URL}}@${BARK_URL:-}@g" ./config.json
-          sed -i "s@{{TELEGRAM_TOKEN}}@${TELEGRAM_TOKEN:-}@g" ./config.json
-          sed -i "s@{{TELEGRAM_USERID}}@${TELEGRAM_USERID:-}@g" ./config.json
-          echo "📝 替换后的配置文件（脱敏）："
-          cat ./config.json | grep -v "cookie"
-
-      - name: Run Enshan Checkin
-        run: |
-          echo "🔄 开始恩山签到..."
-          python main.py --include ENSHAN 2>&1 | tee enshan_checkin.log
-          if [ ${PIPESTATUS[0]} -ne 0 ]; then
-            echo "❌ 签到脚本执行失败！"
+          # 检查目录是否存在，不存在则报错提醒
+          if [ ! -f "./shell/enshan.sh" ]; then
+            echo "❌ 错误: 未在 ./shell/ 目录下找到 enshan.sh"
+            ls -R
             exit 1
           fi
-
-      
+          bash ./shell/enshan.sh
