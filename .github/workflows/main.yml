@@ -1,30 +1,30 @@
 name: Enshan Forum Auto Checkin
 
 on:
-  workflow_dispatch:  # 手动触发测试
+  workflow_dispatch:
   schedule:
-    - cron: '35 0 * * *'  # 北京时间 08:35 执行（UTC+8）
+    - cron: '35 0 * * *'
 
 jobs:
   checkin:
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # 超时保护（避免卡死）
+    timeout-minutes: 10
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 完整克隆（避免文件缺失）
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-          cache: "pip"  # 缓存依赖加速
+          cache: "pip"
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests urllib3  # 仅安装必要依赖（去掉dailycheckin避免冲突）
+          pip install requests urllib3
 
       - name: Random Delay (Anti-Risk)
         run: |
@@ -34,18 +34,16 @@ jobs:
 
       - name: Check Config File
         run: |
-          # 兼容仓库中的 configjson（无.）和标准 config.json
           CONFIG_PATH="./config.json"
           if [ ! -f "$CONFIG_PATH" ]; then
             CONFIG_PATH="./configjson"
             if [ ! -f "$CONFIG_PATH" ]; then
               echo "❌ 错误：未找到 config.json / configjson！"
-              ls -l  # 列出根目录文件便于排查
+              ls -l
               exit 1
             fi
           fi
-          echo "✅ 配置文件检查通过，路径：$CONFIG_PATH"
-          # 重命名为标准 config.json（统一后续操作）
+          echo "✅ 配置文件检查通过"
           mv "$CONFIG_PATH" ./config.json
 
       - name: Replace Config Placeholders
@@ -55,45 +53,25 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_USERID: ${{ secrets.TELEGRAM_USERID }}
         run: |
-          # 核心修复：用@分隔符，补全语法，处理空值，匹配统一占位符
           sed -i "s@{{ENSHAN_COOKIE}}@${ENSHAN_COOKIE:-}@g" ./config.json
           sed -i "s@{{BARK_URL}}@${BARK_URL:-}@g" ./config.json
           sed -i "s@{{TELEGRAM_TOKEN}}@${TELEGRAM_TOKEN:-}@g" ./config.json
           sed -i "s@{{TELEGRAM_USERID}}@${TELEGRAM_USERID:-}@g" ./config.json
-          
-          # 调试：打印替换后的配置（过滤cookie避免泄露）
           echo "📝 替换后的配置文件（脱敏）："
           cat ./config.json | grep -v "cookie"
 
       - name: Run Enshan Checkin
         run: |
           echo "🔄 开始恩山签到..."
-          # 执行脚本并捕获错误日志
           python main.py --include ENSHAN 2>&1 | tee enshan_checkin.log
-          # 检查脚本执行状态
           if [ ${PIPESTATUS[0]} -ne 0 ]; then
             echo "❌ 签到脚本执行失败！"
             exit 1
           fi
 
-      - name: Failure Notification
-        if: failure()  # 仅失败时触发
-        env:
-          BARK_URL: ${{ secrets.BARK_URL }}
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_USERID: ${{ secrets.TELEGRAM_USERID }}
-        run: |
-          FAIL_MSG="❌ 恩山签到失败！
-时间：$(date +'%Y-%m-%d %H:%M:%S')
-日志片段：$(tail -10 enshan_checkin.log | tr '\n' ';')"
-          # Bark 通知（非空才推送）
-          if [ -n "$BARK_URL" ]; then
-            curl -s -X POST "$BARK_URL/恩山签到失败/$FAIL_MSG"
-          fi
-          # Telegram 通知（非空才推送）
-          if [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_USERID" ]; then
-            curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_TOKEN/sendMessage" \
-              -d "chat_id=$TELEGRAM_USERID" \
-              -d "text=$FAIL_MSG" \
-              -d "parse_mode=Markdown"
-          fi
+          
+          
+          # 执行变量替换（解析命令替换）
+          FAIL_MSG=$(eval "cat <<'EVAL_EOF'\n$FAIL_MSG\nEVAL_EOF")
+          
+          
